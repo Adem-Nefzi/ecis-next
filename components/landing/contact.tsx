@@ -5,25 +5,45 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Card } from "@/components/ui/card";
-import { Phone, Mail, MapPin, Loader2, CheckCircle } from "lucide-react";
+import {
+  Phone,
+  Mail,
+  MapPin,
+  Loader2,
+  CheckCircle,
+  AlertCircle,
+} from "lucide-react";
 
-const API_URL = "http://localhost:8069";
+const API_URL = ""; // Change this to your actual API URL in production
+
+interface FormData {
+  name: string;
+  email: string;
+  phone: string;
+  company_name: string;
+  equipment_type: string;
+  serial_number: string;
+  equipment_count: number;
+  message: string;
+  location: string;
+}
+
+type Status = "idle" | "loading" | "success" | "error";
 
 export function Contact() {
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<FormData>({
     name: "",
     email: "",
     phone: "",
     company_name: "",
     equipment_type: "",
+    serial_number: "",
     equipment_count: 1,
     message: "",
     location: "",
   });
 
-  const [status, setStatus] = useState<
-    "idle" | "loading" | "success" | "error"
-  >("idle");
+  const [status, setStatus] = useState<Status>("idle");
   const [errorMessage, setErrorMessage] = useState("");
   const [referenceNumber, setReferenceNumber] = useState("");
 
@@ -32,18 +52,23 @@ export function Contact() {
       HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement
     >,
   ) => {
-    setFormData({
-      ...formData,
-      [e.target.name]: e.target.value,
-    });
+    const { name, value, type } = e.target;
+    setFormData((prev) => ({
+      ...prev,
+      [name]: type === "number" ? parseInt(value) || 1 : value,
+    }));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setStatus("loading");
     setErrorMessage("");
+    setReferenceNumber("");
 
     try {
+      console.log("Submitting to:", `${API_URL}/api/quote-request`);
+      console.log("Form data:", formData);
+
       const response = await fetch(`${API_URL}/api/quote-request`, {
         method: "POST",
         headers: {
@@ -52,7 +77,25 @@ export function Contact() {
         body: JSON.stringify(formData),
       });
 
-      const result = await response.json();
+      console.log("Response status:", response.status);
+      console.log("Response headers:", response.headers);
+
+      // Get response text first
+      const responseText = await response.text();
+      console.log("Response text:", responseText);
+
+      // Try to parse JSON
+      let result;
+      try {
+        const json = JSON.parse(responseText);
+        // Handle Odoo's wrapped response
+        result = json.result || json;
+      } catch (parseError) {
+        console.error("JSON parse error:", parseError);
+        throw new Error("Invalid response from server");
+      }
+
+      console.log("Parsed result:", result);
 
       if (result.success) {
         setStatus("success");
@@ -66,6 +109,7 @@ export function Contact() {
             phone: "",
             company_name: "",
             equipment_type: "",
+            serial_number: "",
             equipment_count: 1,
             message: "",
             location: "",
@@ -78,11 +122,13 @@ export function Contact() {
         setErrorMessage(result.error || "Failed to submit request");
       }
     } catch (error) {
+      console.error("Submission error:", error);
       setStatus("error");
       setErrorMessage(
-        "Network error. Please check your connection and try again.",
+        error instanceof Error
+          ? error.message
+          : "Network error. Please check your connection and try again.",
       );
-      console.error("Submission error:", error);
     }
   };
 
@@ -144,15 +190,19 @@ export function Contact() {
           {/* Contact Form */}
           <Card className="p-8 border border-border">
             <form onSubmit={handleSubmit} className="space-y-5">
+              {/* Success Message */}
               {status === "success" && (
                 <div className="p-4 bg-green-50 border border-green-200 rounded-lg flex items-start gap-3">
-                  <CheckCircle className="text-green-600 mt-0.5" size={20} />
+                  <CheckCircle
+                    className="text-green-600 mt-0.5 flex-shrink-0"
+                    size={20}
+                  />
                   <div>
                     <p className="text-green-800 font-medium">
                       Request submitted successfully!
                     </p>
                     <p className="text-green-700 text-sm mt-1">
-                      Reference: {referenceNumber}
+                      Reference: <strong>{referenceNumber}</strong>
                     </p>
                     <p className="text-green-600 text-sm">
                       We'll contact you within 24 hours.
@@ -161,12 +211,21 @@ export function Contact() {
                 </div>
               )}
 
+              {/* Error Message */}
               {status === "error" && (
-                <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
-                  <p className="text-red-800 font-medium">{errorMessage}</p>
+                <div className="p-4 bg-red-50 border border-red-200 rounded-lg flex items-start gap-3">
+                  <AlertCircle
+                    className="text-red-600 mt-0.5 flex-shrink-0"
+                    size={20}
+                  />
+                  <div>
+                    <p className="text-red-800 font-medium">Error</p>
+                    <p className="text-red-700 text-sm">{errorMessage}</p>
+                  </div>
                 </div>
               )}
 
+              {/* Full Name */}
               <div>
                 <label className="block text-sm font-medium text-foreground mb-2">
                   Full Name *
@@ -176,13 +235,14 @@ export function Contact() {
                   name="name"
                   value={formData.name}
                   onChange={handleChange}
-                  placeholder="Your name"
+                  placeholder="John Doe"
                   required
                   disabled={status === "loading"}
                   className="w-full"
                 />
               </div>
 
+              {/* Company Name */}
               <div>
                 <label className="block text-sm font-medium text-foreground mb-2">
                   Company Name
@@ -192,12 +252,13 @@ export function Contact() {
                   name="company_name"
                   value={formData.company_name}
                   onChange={handleChange}
-                  placeholder="Company name (optional)"
+                  placeholder="ABC Industrial (optional)"
                   disabled={status === "loading"}
                   className="w-full"
                 />
               </div>
 
+              {/* Email */}
               <div>
                 <label className="block text-sm font-medium text-foreground mb-2">
                   Email Address *
@@ -207,13 +268,14 @@ export function Contact() {
                   name="email"
                   value={formData.email}
                   onChange={handleChange}
-                  placeholder="your@email.com"
+                  placeholder="john@example.com"
                   required
                   disabled={status === "loading"}
                   className="w-full"
                 />
               </div>
 
+              {/* Phone */}
               <div>
                 <label className="block text-sm font-medium text-foreground mb-2">
                   Phone Number *
@@ -223,13 +285,14 @@ export function Contact() {
                   name="phone"
                   value={formData.phone}
                   onChange={handleChange}
-                  placeholder="+213 ..."
+                  placeholder="+213 555 123 456"
                   required
                   disabled={status === "loading"}
                   className="w-full"
                 />
               </div>
 
+              {/* Equipment Type */}
               <div>
                 <label className="block text-sm font-medium text-foreground mb-2">
                   Equipment Type *
@@ -253,6 +316,23 @@ export function Contact() {
                 </select>
               </div>
 
+              {/* Serial Number - NEW FIELD */}
+              <div>
+                <label className="block text-sm font-medium text-foreground mb-2">
+                  Serial Number
+                </label>
+                <Input
+                  type="text"
+                  name="serial_number"
+                  value={formData.serial_number}
+                  onChange={handleChange}
+                  placeholder="Equipment serial number (if known)"
+                  disabled={status === "loading"}
+                  className="w-full"
+                />
+              </div>
+
+              {/* Number of Equipment */}
               <div>
                 <label className="block text-sm font-medium text-foreground mb-2">
                   Number of Equipment
@@ -268,6 +348,7 @@ export function Contact() {
                 />
               </div>
 
+              {/* Location */}
               <div>
                 <label className="block text-sm font-medium text-foreground mb-2">
                   Location
@@ -277,12 +358,13 @@ export function Contact() {
                   name="location"
                   value={formData.location}
                   onChange={handleChange}
-                  placeholder="Where is the equipment located?"
+                  placeholder="Algiers, Constantine, Oran, etc."
                   disabled={status === "loading"}
                   className="w-full"
                 />
               </div>
 
+              {/* Message */}
               <div>
                 <label className="block text-sm font-medium text-foreground mb-2">
                   Message
@@ -298,6 +380,7 @@ export function Contact() {
                 />
               </div>
 
+              {/* Submit Button */}
               <Button
                 type="submit"
                 disabled={status === "loading"}
